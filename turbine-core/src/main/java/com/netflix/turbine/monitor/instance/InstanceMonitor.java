@@ -35,6 +35,10 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.net.NoRouteToHostException;
 import java.net.UnknownHostException;
+import java.security.KeyManagementException;
+import java.security.KeyStoreException;
+import java.security.NoSuchAlgorithmException;
+import java.security.UnrecoverableKeyException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
@@ -61,8 +65,14 @@ import org.apache.http.client.HttpClient;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.client.methods.HttpUriRequest;
 import org.apache.http.conn.ClientConnectionManager;
+import org.apache.http.conn.scheme.PlainSocketFactory;
+import org.apache.http.conn.scheme.Scheme;
+import org.apache.http.conn.scheme.SchemeRegistry;
+import org.apache.http.conn.ssl.SSLSocketFactory;
+import org.apache.http.conn.ssl.TrustSelfSignedStrategy;
 import org.apache.http.entity.InputStreamEntity;
 import org.apache.http.impl.client.DefaultHttpClient;
+import org.apache.http.impl.conn.PoolingClientConnectionManager;
 import org.apache.http.params.HttpConnectionParams;
 import org.apache.http.params.HttpParams;
 import org.codehaus.jackson.JsonParseException;
@@ -116,6 +126,30 @@ public class InstanceMonitor extends TurbineDataMonitor<DataFromSingleInstance> 
             return thread;
         }
     };
+
+    private static final SchemeRegistry schemeRegistry;
+
+    static{
+        SSLSocketFactory sf = null;
+        try {
+            sf = new SSLSocketFactory(new TrustSelfSignedStrategy(), SSLSocketFactory.ALLOW_ALL_HOSTNAME_VERIFIER);
+        } catch (NoSuchAlgorithmException e) {
+            e.printStackTrace();
+        } catch (KeyManagementException e) {
+            e.printStackTrace();
+        } catch (KeyStoreException e) {
+            e.printStackTrace();
+        } catch (UnrecoverableKeyException e) {
+            e.printStackTrace();
+        }
+        Scheme httpScheme = new Scheme("http", 80, PlainSocketFactory.getSocketFactory());
+        Scheme httpsScheme = new Scheme("https", 443, sf);
+        schemeRegistry = new SchemeRegistry();
+        schemeRegistry.register(httpScheme);
+        schemeRegistry.register(httpsScheme);
+    }
+
+    private final static PoolingClientConnectionManager threadSafeConnectionManager = new PoolingClientConnectionManager(schemeRegistry);
 
     public static final ExecutorService ThreadPool = Executors.newCachedThreadPool(InstanceMonitorThreadFactory);
 
@@ -560,7 +594,7 @@ public class InstanceMonitor extends TurbineDataMonitor<DataFromSingleInstance> 
 
         @Override
         public HttpClient getHttpClient() {
-            httpClient = new DefaultHttpClient();
+            httpClient = new DefaultHttpClient(threadSafeConnectionManager);
             HttpParams httpParams = httpClient.getParams();
             HttpConnectionParams.setConnectionTimeout(httpParams, 10000);
             HttpConnectionParams.setSoTimeout(httpParams, 10000); // we expect a 'ping' at least every 3 seconds even if no data is coming so 4 seconds means something is wrong

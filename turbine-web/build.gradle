@@ -1,8 +1,9 @@
-apply plugin: 'java'
+//apply plugin: 'java'
 apply plugin: 'war'
 apply plugin: 'jetty'
 
     dependencies {
+        provided 'javax.servlet:servlet-api:2.5'
         compile project(":turbine-core")
         compile project(":turbine-contrib")
         compile 'log4j:log4j:1.2.17'
